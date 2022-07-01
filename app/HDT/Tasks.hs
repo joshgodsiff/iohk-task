@@ -3,6 +3,8 @@
 {-# OPTIONS_GHC -Wno-missing-methods #-}
 {-# OPTIONS_GHC -Wno-unused-imports  #-}
 
+{-# LANGUAGE DeriveFunctor #-}
+
 {-|
 Module      : HDT.Tasks
 Description : IOHK Haskell Developer Test
@@ -119,6 +121,18 @@ module HDT.Tasks
 import Control.Concurrent.STM
 import Numeric.Natural        (Natural)
 import Text.Printf            (printf)
+import Data.Text as T
+import Data.Text.IO as T
+import Control.Monad.Free
+import System.IO
+import Control.Concurrent
+import Control.Concurrent.Async
+
+data AgentF msg a
+  = Delay a
+  | Broadcast msg a
+  | Receive (msg -> a)
+  deriving Functor
 
 -- |An @'Agent' msg a@ is an abstract process that can send and receive broadcast
 -- messages of type @msg@ and will eventually return a result of type @a@.
@@ -127,34 +141,34 @@ import Text.Printf            (printf)
 --
 -- Agents can be used to model concurrent agents that communicate and coordinate
 -- via message exchange over a broadcast channel.
-data Agent msg a
+type Agent msg = Free (AgentF msg)
 
 -- |__TODO:__ Provide a @'Functor'@ instance for @'Agent' msg@.
-instance Functor (Agent msg) where
+-- instance Functor (Agent msg) where
 
 -- |__TODO:__ Provide an @'Applicative'@ instance for @'Agent' msg@.
-instance Applicative (Agent msg) where
+-- instance Applicative (Agent msg) where
 
 -- |__TODO:__ Provide a @'Monad'@ instance for @'Agent' msg@.
 -- The resulting monad should be /free/ and support operations
 -- @'delay'@, @'broadcast'@ and @'receive'@ described below.
-instance Monad (Agent msg) where
+-- instance Monad (Agent msg) where
 
 -- |Delay for one timestep.
 -- __TODO:__ Implement @'delay'@.
 delay :: Agent msg ()
-delay = error "TODO: implement delay"
+delay = liftF $ Delay ()
 
 -- |Broadcast a message.
 -- __TODO:__ Implement @'broadcast'@.
 broadcast :: msg          -- ^The message to broadcast.
           -> Agent msg ()
-broadcast = error "TODO: implement broadcast"
+broadcast msg = liftF $ Broadcast msg ()
 
 -- |Wait for a broadcast and return the received message.
 -- __TODO:__ Implement @'receive'@.
 receive :: Agent msg msg
-receive = error "TODO: implement receive"
+receive = liftF $ Receive id
 
 -- |The message type used by agents @'ping'@ and @'pong'@.
 data PingPongMessage =
@@ -183,6 +197,26 @@ pong = do
         Ping -> delay >> broadcast Pong >> pong
         Pong -> pong
 
+tshow :: Show a => a -> T.Text
+tshow = T.pack . show
+
+interpretAgent :: Show msg => TChan msg -> Agent msg () -> IO ()
+interpretAgent bCast ag = do
+  localChan <- atomically $ dupTChan bCast
+  foldFree (go localChan) ag
+  where
+    -- go :: AgentF msg x -> IO x
+    go readC agF = case agF of
+      Delay a -> threadDelay 1 >> pure a
+      Broadcast m a -> do
+        T.putStrLn $ tshow m
+        atomically $ writeTChan bCast m
+        pure a
+      Receive a -> do 
+        m <- atomically $ readTChan readC
+        T.putStrLn $ tshow m
+        pure (a m)
+
 -- |Function @'runIO' agents@ runs each agent in the given list
 -- concurrently in the @'IO'@-monad.
 -- Broadcast should be realized using a @'TChan' msg@ which is shared amongst
@@ -203,7 +237,10 @@ pong = do
 runIO :: Show msg
       => [Agent msg ()] -- ^The agents to run concurrently.
       -> IO ()
-runIO = error "TODO: implement runIO"
+runIO agnts = do
+  hSetBuffering stdout LineBuffering
+  bchan <- newBroadcastTChanIO
+  forConcurrently_ agnts $ interpretAgent bchan
 
 -- |Time is divided into @'Slot'@s.
 type Slot = Natural

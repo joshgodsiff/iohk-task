@@ -1,4 +1,4 @@
-cabal-version:      2.4
+cabal-version:      3.6
 name:               iohk-task
 version:            0.1.0.0
 
@@ -25,10 +25,14 @@ executable iohk-task
     main-is:          Main.hs
 
     -- Modules included in this executable, other than Main.
-    -- other-modules:
+    other-modules:    HDT.Tasks
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
     build-depends:    base ^>=4.14.3.0
+                    , stm
+                    , free
+                    , text
+                    , async
     hs-source-dirs:   app
     default-language: Haskell2010
