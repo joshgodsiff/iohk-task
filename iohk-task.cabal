@@ -34,5 +34,6 @@ executable iohk-task
                     , free
                     , text
                     , async
+                    , containers
     hs-source-dirs:   app
     default-language: Haskell2010

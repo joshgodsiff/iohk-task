@@ -4,6 +4,10 @@
 {-# OPTIONS_GHC -Wno-unused-imports  #-}
 
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE TupleSections #-}
 
 {-|
 Module      : HDT.Tasks
@@ -121,12 +125,16 @@ module HDT.Tasks
 import Control.Concurrent.STM
 import Numeric.Natural        (Natural)
 import Text.Printf            (printf)
-import Data.Text as T
-import Data.Text.IO as T
-import Control.Monad.Free
+import qualified Data.Text as T
+import qualified Data.Text.IO as T
+import Control.Monad.Free ( foldFree, liftF, Free (..), iter )
 import System.IO
 import Control.Concurrent
 import Control.Concurrent.Async
+import Data.Foldable as F hiding (toList)
+import Control.Monad ( when )
+import Data.Maybe (catMaybes, mapMaybe, listToMaybe)
+import qualified Data.Sequence as S
 
 data AgentF msg a
   = Delay a
@@ -201,20 +209,22 @@ tshow :: Show a => a -> T.Text
 tshow = T.pack . show
 
 interpretAgent :: Show msg => TChan msg -> Agent msg () -> IO ()
-interpretAgent bCast ag = do
+interpretAgent bCast agent = do
   localChan <- atomically $ dupTChan bCast
-  foldFree (go localChan) ag
+  foldFree (go bCast localChan) agent
   where
-    -- go :: AgentF msg x -> IO x
-    go readC agF = case agF of
-      Delay a -> threadDelay 1 >> pure a
+    oneSecond = 1000000
+    go :: Show msg => TChan msg -> TChan msg -> AgentF msg x -> IO x
+    go broadcast readC agentF = case agentF of
+      Delay a -> do
+        threadDelay oneSecond
+        pure a
       Broadcast m a -> do
         T.putStrLn $ tshow m
-        atomically $ writeTChan bCast m
+        atomically $ writeTChan broadcast m
         pure a
       Receive a -> do 
         m <- atomically $ readTChan readC
-        T.putStrLn $ tshow m
         pure (a m)
 
 -- |Function @'runIO' agents@ runs each agent in the given list
@@ -237,10 +247,10 @@ interpretAgent bCast ag = do
 runIO :: Show msg
       => [Agent msg ()] -- ^The agents to run concurrently.
       -> IO ()
-runIO agnts = do
+runIO agents = do
   hSetBuffering stdout LineBuffering
   bchan <- newBroadcastTChanIO
-  forConcurrently_ agnts $ interpretAgent bchan
+  forConcurrently_ agents $ interpretAgent bchan
 
 -- |Time is divided into @'Slot'@s.
 type Slot = Natural
@@ -248,6 +258,9 @@ type Slot = Natural
 -- |Each node has a @'NodeId'@.
 -- If there are @n@ nodes, their id's will be 0, 1, 2,...,@(n-1)@.
 type NodeId = Natural
+
+-- | The total number of nodes participating in the chain
+type NumNodes = Natural
 
 -- |The blockchain is built from @'Block'@s.
 data Block = Block
@@ -261,9 +274,16 @@ instance Show Block where
 infixl 5 :>
 
 -- |A blockchain can either be empty (just the genesis block) or contain @'Block'@s.
-data Chain =
-      Genesis
-    | Chain :> Block
+data Chain
+  = Genesis
+  | Chain :> Block
+
+toList :: Chain -> [Block]
+toList Genesis = []
+toList (c :> b) = b : toList c
+
+castNum :: (Integral a, Num b) => a -> b
+castNum = fromInteger . toInteger
 
 instance Show Chain where
     showsPrec _ Genesis  = showString "Genesis"
@@ -275,8 +295,8 @@ instance Show Chain where
 -- 0
 -- >>> chainLength $ Genesis :> Block 2 2 :> Block 3 0
 -- 2
-chainLength :: Chain -> Int
-chainLength = error "TODO: implement chainLength"
+chainLength :: Chain -> NumNodes
+chainLength = castNum . F.length . toList
 
 -- |Computes the slot leader. __TODO:__ Implement @'slotLeader'@.
 --
@@ -286,11 +306,11 @@ chainLength = error "TODO: implement chainLength"
 -- 1
 -- >>> slotLeader 3 3
 -- 0
-slotLeader :: Int    -- ^Total number of nodes.
-           -> Slot   -- ^The @'Slot'@.
-           -> NodeId -- ^Identifies the node that has the right to create a block
-                     --  in the given @'Slot'@.
-slotLeader = error "TODO: implement slotLeader"
+slotLeader :: NumNodes -- ^Total number of nodes.
+           -> Slot     -- ^The @'Slot'@.
+           -> NodeId   -- ^Identifies the node that has the right to create a block
+                       --  in the given @'Slot'@.
+slotLeader numNodes slot = slot `mod` numNodes
 
 -- |Determines whether a chain is valid.  __TODO:__ Implement @'chainValid'@.
 --
@@ -304,11 +324,27 @@ slotLeader = error "TODO: implement slotLeader"
 -- False
 -- >>> chainValid 3 14 $ Genesis :> Block 3 0 :> Block 10 1
 -- True
-chainValid :: Int   -- ^Total number of nodes.
-           -> Slot  -- ^Current slot.
-           -> Chain -- ^Chain to validate.
+chainValid :: NumNodes -- ^Total number of nodes.
+           -> Slot     -- ^Current slot.
+           -> Chain    -- ^Chain to validate.
            -> Bool
-chainValid = error "TODO: implement chainValid"
+chainValid numNodes slot chain = tsSI && bCBL && lBNFF
+  where
+    tsSI  = timestampsStrictlyIncreasing chain
+    bCBL  = blockCreatedByLeader numNodes chain
+    lBNFF = latestBlockNotFromFuture slot chain
+
+timestampsStrictlyIncreasing :: Chain -> Bool
+timestampsStrictlyIncreasing = snd . F.foldr f (0, True) . toList
+  where
+    f blk (slt, bool) = (slot blk, slot blk > slt)
+
+blockCreatedByLeader :: NumNodes -> Chain -> Bool
+blockCreatedByLeader numNodes = F.all (\b -> creator b == slotLeader numNodes (slot b)) . toList
+
+latestBlockNotFromFuture :: Slot -> Chain -> Bool
+latestBlockNotFromFuture time Genesis = True
+latestBlockNotFromFuture time (_ :> b) = time >= slot b
 
 -- |The type of messages used for communication in the BFT-protocol.
 data BftMessage =
@@ -321,15 +357,36 @@ data BftMessage =
 -- using @'Time'@-messages. The agent should start with @'Slot' 0@ and run forever.
 -- __TODO:__ Implement @'clock'@.
 clock :: Agent BftMessage a
-clock = error "TODO: implement clock"
+clock = go 0
+  where
+    go !t = do
+      broadcast (Time t)
+      delay
+      go (t + 1)
 
 -- |A @'node'@ participating in the BFT-protocol. It should start with the @'Genesis'@
 -- chain at @'Slot' 0@ and run forever.
 -- __TODO:__ Implement @'node'@.
-node :: Int                -- ^Total number of nodes.
+node :: NumNodes           -- ^Total number of nodes.
      -> NodeId             -- ^Identifier of /this/ node.
-     -> Agent BftMessage a
-node = error "TODO: implement node"
+     -> Agent BftMessage ()
+node numNodes nodeId = go 0 Genesis
+  where
+    go slot c = do
+      msg <- receive
+      case msg of
+        Time s -> do
+          when (slotLeader numNodes s == nodeId) $
+            broadcast .  NewChain $ c :> Block s nodeId
+          go s c
+        NewChain newC ->
+          if chainValid numNodes slot newC && (chainLength newC > chainLength c)
+          then go (currentSlot newC) newC
+          else go slot c
+
+currentSlot :: Chain -> Slot
+currentSlot Genesis = 0
+currentSlot (_ :> b) = slot b
 
 -- |Interprets a list of agents in a /pure/ fashion,
 -- returning the list of all broadcasts (with their timestamps).
@@ -344,4 +401,27 @@ node = error "TODO: implement node"
 runPure :: [Agent msg ()]   -- ^The agents to run.
         -> [(Natural, msg)] -- ^A list of all broadcasts, represented by
                             -- pairs containing a timestamp and the message that was sent.
-runPure = error "TODO: implement runPure"
+runPure = zip [1..] . go . fmap (\a -> PureAgent {queue = S.Empty, agent = a})
+  where
+    go :: [PureAgent msg ()] -> [msg]
+    go inputs =
+      let
+        next      = interpret <$> inputs
+        newMsgs   = mapMaybe fst next
+        newAgents = (\a -> a { queue = queue a S.>< S.fromList newMsgs }) <$> mapMaybe snd next
+      in newMsgs ++ go newAgents
+
+interpret :: PureAgent msg a -> (Maybe msg, Maybe (PureAgent msg a))
+interpret pa = case agent pa of
+  Pure a -> (Nothing, Nothing)
+  (Free f) -> case f of
+    Delay a         -> (Nothing, pure $ pa { agent = a})
+    Broadcast msg a -> (pure msg, pure $ pa { agent = a})
+    Receive g       -> case queue pa of
+      S.Empty  -> (Nothing, pure pa)
+      (msg S.:<| ms) -> (Nothing, pure $ PureAgent { queue = ms, agent = g msg})
+
+data PureAgent msg a = PureAgent
+  { agent :: Agent msg a
+  , queue :: S.Seq msg
+  }
