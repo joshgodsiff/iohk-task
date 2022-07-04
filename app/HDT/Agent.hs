@@ -19,29 +19,19 @@ data AgentF msg a
 -- via message exchange over a broadcast channel.
 type Agent msg = Free (AgentF msg)
 
--- |__TODO:__ Provide a @'Functor'@ instance for @'Agent' msg@.
--- instance Functor (Agent msg) where
-
--- |__TODO:__ Provide an @'Applicative'@ instance for @'Agent' msg@.
--- instance Applicative (Agent msg) where
-
--- |__TODO:__ Provide a @'Monad'@ instance for @'Agent' msg@.
 -- The resulting monad should be /free/ and support operations
 -- @'delay'@, @'broadcast'@ and @'receive'@ described below.
 -- instance Monad (Agent msg) where
 
 -- |Delay for one timestep.
--- __TODO:__ Implement @'delay'@.
 delay :: Agent msg ()
 delay = liftF $ Delay ()
 
 -- |Broadcast a message.
--- __TODO:__ Implement @'broadcast'@.
 broadcast :: msg          -- ^The message to broadcast.
           -> Agent msg ()
 broadcast msg = liftF $ Broadcast msg ()
 
 -- |Wait for a broadcast and return the received message.
--- __TODO:__ Implement @'receive'@.
 receive :: Agent msg msg
 receive = liftF $ Receive id

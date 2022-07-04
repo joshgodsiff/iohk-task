@@ -5,12 +5,10 @@ import HDT.Agent
 import HDT.Blockchain
 
 -- | The type of messages used for communication in the BFT-protocol.
-data BftMessage
-  = -- | Message used by the @'clock'@ to broadcast the current time.
-    Time Slot
-  | -- | Message used by a @'node'@ to announce a new @'Chain'@.
-    NewChain Chain
-  deriving (Show)
+data BftMessage =
+      Time Slot      -- ^Message used by the @'clock'@ to broadcast the current time.
+    | NewChain Chain -- ^Message used by a @'node'@ to announce a new @'Chain'@.
+    deriving Show
 
 -- | The nodes do not keep track of time by themselves, but instead rely on
 --  the @'clock'@ agent, which broadcasts the beginning of each new @'Slot'@
@@ -27,12 +25,9 @@ clock = go 0
 -- | A @'node'@ participating in the BFT-protocol. It should start with the @'Genesis'@
 --  chain at @'Slot' 0@ and run forever.
 --  __TODO:__ Implement @'node'@.
-node ::
-  -- | Total number of nodes.
-  NumNodes ->
-  -- | Identifier of /this/ node.
-  NodeId ->
-  Agent BftMessage ()
+node :: NumNodes           -- ^Total number of nodes.
+     -> NodeId             -- ^Identifier of /this/ node.
+     -> Agent BftMessage a
 node numNodes nodeId = go 0 Genesis
   where
     go slot' c = do

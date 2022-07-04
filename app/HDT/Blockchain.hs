@@ -16,11 +16,9 @@ type NumNodes = Natural
 
 -- | The blockchain is built from @'Block'@s.
 data Block = Block
-  { -- | Timestamp indicating when the block was created.
-    slot :: Slot,
-    -- | Identifies the node that created the block.
-    creator :: NodeId
-  }
+    { slot    :: Slot   -- ^Timestamp indicating when the block was created.
+    , creator :: NodeId -- ^Identifies the node that created the block.
+    }
 
 instance Show Block where
   show b = printf "{%d %d}" (slot b) (creator b)
@@ -53,14 +51,10 @@ chainLength = castNum . F.length . toList
 --  1
 --  >>> slotLeader 3 3
 --  0
-slotLeader ::
-  -- | Total number of nodes.
-  NumNodes ->
-  -- | The @'Slot'@.
-  Slot ->
-  -- | Identifies the node that has the right to create a block
-  --   in the given @'Slot'@.
-  NodeId
+slotLeader :: NumNodes -- ^Total number of nodes.
+           -> Slot     -- ^The @'Slot'@.
+           -> NodeId   -- ^Identifies the node that has the right to create a block
+                       --  in the given @'Slot'@.
 slotLeader numNodes s = s `mod` numNodes
 
 -- | Determines whether a chain is valid.  __TODO:__ Implement @'chainValid'@.
@@ -75,14 +69,10 @@ slotLeader numNodes s = s `mod` numNodes
 --  False
 --  >>> chainValid 3 14 $ Genesis :> Block 3 0 :> Block 10 1
 --  True
-chainValid ::
-  -- | Total number of nodes.
-  NumNodes ->
-  -- | Current slot.
-  Slot ->
-  -- | Chain to validate.
-  Chain ->
-  Bool
+chainValid :: NumNodes -- ^Total number of nodes.
+           -> Slot     -- ^Current slot.
+           -> Chain    -- ^Chain to validate.
+           -> Bool
 chainValid numNodes s chain = tsSI && bCBL && lBNFF
   where
     tsSI = timestampsStrictlyIncreasing chain
