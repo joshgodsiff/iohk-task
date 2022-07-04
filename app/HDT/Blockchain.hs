@@ -61,7 +61,7 @@ slotLeader ::
   -- | Identifies the node that has the right to create a block
   --   in the given @'Slot'@.
   NodeId
-slotLeader numNodes slot = slot `mod` numNodes
+slotLeader numNodes s = s `mod` numNodes
 
 -- | Determines whether a chain is valid.  __TODO:__ Implement @'chainValid'@.
 --
@@ -83,22 +83,22 @@ chainValid ::
   -- | Chain to validate.
   Chain ->
   Bool
-chainValid numNodes slot chain = tsSI && bCBL && lBNFF
+chainValid numNodes s chain = tsSI && bCBL && lBNFF
   where
     tsSI = timestampsStrictlyIncreasing chain
     bCBL = blockCreatedByLeader numNodes chain
-    lBNFF = latestBlockNotFromFuture slot chain
+    lBNFF = latestBlockNotFromFuture s chain
 
 timestampsStrictlyIncreasing :: Chain -> Bool
 timestampsStrictlyIncreasing = snd . F.foldr f (0, True) . toList
   where
-    f blk (slt, bool) = (slot blk, slot blk > slt)
+    f blk (slt, b) = (slot blk, slot blk > slt)
 
 blockCreatedByLeader :: NumNodes -> Chain -> Bool
 blockCreatedByLeader numNodes = F.all (\b -> creator b == slotLeader numNodes (slot b)) . toList
 
 latestBlockNotFromFuture :: Slot -> Chain -> Bool
-latestBlockNotFromFuture time Genesis = True
+latestBlockNotFromFuture _    Genesis  = True
 latestBlockNotFromFuture time (_ :> b) = time >= slot b
 
 toList :: Chain -> [Block]

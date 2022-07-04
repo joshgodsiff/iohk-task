@@ -35,7 +35,7 @@ node ::
   Agent BftMessage ()
 node numNodes nodeId = go 0 Genesis
   where
-    go slot c = do
+    go slot' c = do
       msg <- receive
       case msg of
         Time s -> do
@@ -43,9 +43,9 @@ node numNodes nodeId = go 0 Genesis
             broadcast . NewChain $ c :> Block s nodeId
           go s c
         NewChain newC ->
-          if chainValid numNodes slot newC && (chainLength newC > chainLength c)
+          if chainValid numNodes slot' newC && (chainLength newC > chainLength c)
             then go (currentSlot newC) newC
-            else go slot c
+            else go slot' c
 
 currentSlot :: Chain -> Slot
 currentSlot Genesis = 0
