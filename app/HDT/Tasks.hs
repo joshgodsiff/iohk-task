@@ -114,8 +114,6 @@ module HDT.Tasks
       -- >>> take 5 $ runPure [ping, pong]
       -- [(1,Ping),(2,Pong),(3,Ping),(4,Pong),(5,Ping)]
       , runPure
-
-      , PartitionedAgents (..)
     )  where
 
 import HDT.Agent
