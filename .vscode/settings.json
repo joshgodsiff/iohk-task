@@ -2,11 +2,15 @@
   "cSpell.words": [
     "agnts",
     "bchan",
+    "BNFF",
     "Brünjes",
     "IOHK",
+    "mempty",
+    "Monoid",
     "Ouroboros",
     "Paren",
     "Prec",
+    "Semigroup",
     "stricly",
     "timestep",
     "tshow"
