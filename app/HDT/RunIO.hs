@@ -9,8 +9,8 @@ import qualified Data.Text.IO as T
 import HDT.Agent
 import System.IO
 
-tshow :: Show a => a -> T.Text
-tshow = T.pack . show
+tshowLn :: Show a => a -> T.Text
+tshowLn = T.pack . (++ "\n") . show 
 
 interpretAgent :: Show msg => TChan msg -> Agent msg () -> IO ()
 interpretAgent bCast agent = do
@@ -24,7 +24,7 @@ interpretAgent bCast agent = do
         threadDelay oneSecond
         pure a
       Broadcast m a -> do
-        T.putStrLn $ tshow m
+        T.putStr $ tshowLn m
         atomically $ writeTChan broadcast m
         pure a
       Receive a -> do
