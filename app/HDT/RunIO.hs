@@ -8,24 +8,27 @@ import Data.Text as T
 import qualified Data.Text.IO as T
 import HDT.Agent
 import System.IO
+import Text.Printf (printf)
 
 tshowLn :: Show a => a -> T.Text
-tshowLn = T.pack . (++ "\n") . show 
+tshowLn = T.pack . printf "%s\n" . show
+
+oneSecond :: Int
+oneSecond = 1000000
 
 interpretAgent :: Show msg => TChan msg -> Agent msg () -> IO ()
-interpretAgent bCast agent = do
-  localChan <- atomically $ dupTChan bCast
-  foldFree (go bCast localChan) agent
+interpretAgent bcast agent = do
+  localChan <- atomically $ dupTChan bcast
+  foldFree (go bcast localChan) agent
   where
-    oneSecond = 1000000
     go :: Show msg => TChan msg -> TChan msg -> AgentF msg x -> IO x
-    go broadcast readC agentF = case agentF of
+    go bcast' readC agentF = case agentF of
       Delay a -> do
         threadDelay oneSecond
         pure a
       Broadcast m a -> do
         T.putStr $ tshowLn m
-        atomically $ writeTChan broadcast m
+        atomically $ writeTChan bcast' m
         pure a
       Receive a -> do
         m <- atomically $ readTChan readC
@@ -46,8 +49,6 @@ interpretAgent bCast agent = do
 --     to the console.
 --   * @'receive'@ should block the thread until a message is received on the
 --     shared @'TChan'@.
---
---  __TODO:__ Implement @'runIO'@.
 runIO ::
   Show msg =>
   -- | The agents to run concurrently.

@@ -22,8 +22,6 @@ import Numeric.Natural (Natural)
 --   * all active agents,
 --   * all delayed agents and
 --   * all agents waiting for a broadcast.
---
---  __TODO:__ Implement @'runPure'@.
 runPure :: [Agent msg ()]   -- ^The agents to run.
         -> [(Natural, msg)] -- ^A list of all broadcasts, represented by
                             -- pairs containing a timestamp and the message that was sent.
@@ -70,9 +68,9 @@ partitionAgent g c pa = case g c of
 popAgent ::
   PartitionedAgents (PureAgent msg b) ->
   (Maybe (PureAgent msg b), PartitionedAgents (PureAgent msg b))
-popAgent pa@PartitionedAgents {broadcasting = (n :<| nx)} = (pure n, pa {broadcasting = nx})
 popAgent pa@PartitionedAgents {receiving    = (n :<| nx)}
   | not . S.null $ queue n                                = (pure n, pa {receiving = nx})
+popAgent pa@PartitionedAgents {broadcasting = (n :<| nx)} = (pure n, pa {broadcasting = nx})
 popAgent pa@PartitionedAgents {delayed      = (n :<| nx)} = (pure n, pa {delayed = nx})
 popAgent pa@PartitionedAgents {}                          = (Nothing, pa)
 
